@@ -1,20 +1,20 @@
+#include <LiquidCrystal_I2C.h>
+
 //Libraries & global include
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
-LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+//#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 20,4);
 
 // Rotary Encoder Module connections
 const int encoder0PinA = 2; // CLOCK signal
 const int encoder0PinB = 3; // DATA signal
 const int PinSW = 5;        // Rotary Encoder Switch
-volatile unsigned int encoder0Pos = 0;
-unsigned int oldEncoder0Position = 0;
-unsigned int Aold = 0;
-unsigned int Bnew = 0;
+volatile byte encoder0Pos = 0;
+byte oldEncoder0Position = 0;
 
 // Variables to debounce Rotary Encoder
 long TimeOfLastDebounce = 0;
-int DelayofDebounce = 0.01;
+int DelayofDebounce = 0.02;
 bool PrintDisplayCounter = true;
 
 // Variables for timer
@@ -23,24 +23,37 @@ bool IsTimerRunning = false;
 
 void setup()
 {
+  lcd.init();
+  lcd.setBacklight(LCD_BACKLIGHT);
+  lcd.clear();
+  lcd.setCursor(0,0);
+  Serial.begin(9600);
+
+
+
+  lcd.print(encoder0Pos);
   initializeRotaryEncoder();
 }
 
 void loop()
 {
-  if (hasEncoderMoved)
+  
+  if (oldEncoder0Position != encoder0Pos)
   {
+    oldEncoder0Position = encoder0Pos;
     // Do encoder moved stuff stuff
     //Ex:
-    String test = String(encoder0Pos, DEC);
-    print_1Line(test);
+    printDisplayCounter();
+     Serial.print(encoder0Pos);
+     Serial.print(oldEncoder0Position);
+     Serial.println();
   }
-  // Check if Rotary Encoder switch was pressed
-  if (digitalRead(PinSW) == LOW)
-  {
-    // Do button pressed stuff
-    printDisplayCounter(encoder0Pos);
-  }
+//  // Check if Rotary Encoder switch was pressed
+//  if (digitalRead(PinSW) == LOW)
+//  {
+//    // Do button pressed stuff
+//    printDisplayCounter();
+//  }
 }
 
 // Returns true if the encoder has moved from last position
@@ -51,10 +64,14 @@ bool hasEncoderMoved()
     oldEncoder0Position = encoder0Pos;
     return true;
   }
-  return false;
+  else
+  {
+    return false;
+  }
+  
 }
 
-void printDisplayCounter(int encoder0Pos)
+void printDisplayCounter()
 {
   if (PrintDisplayCounter)
   {
@@ -84,28 +101,24 @@ void initializeRotaryEncoder()
   pinMode(encoder0PinA, INPUT);
   pinMode(encoder0PinB, INPUT);
   // encoder pin on interrupt 0 (pin 2)
-  attachInterrupt(0, doEncoderA, CHANGE);
+  attachInterrupt(0, doEncoder, CHANGE);
   // encoder pin on interrupt 1 (pin 3)
-  attachInterrupt(1, doEncoderB, CHANGE);
+  //attachInterrupt(1, doEncoder, CHANGE);
 }
 
 // Interrupt on A changing state
-void doEncoderA()
+void doEncoder()
 {
-  if ((millis() - TimeOfLastDebounce) > DelayofDebounce)
-  {
-    Bnew ^ Aold ? encoder0Pos++ : encoder0Pos--;
-    Aold = digitalRead(encoder0PinA);
-    TimeOfLastDebounce = millis(); // Set variable to current millis() timer
-  }
-}
-// Interrupt on B changing state
-void doEncoderB()
-{
-  if ((millis() - TimeOfLastDebounce) > DelayofDebounce)
-  {
-    Bnew = digitalRead(encoder0PinB);
-    Bnew ^ Aold ? encoder0Pos++ : encoder0Pos--;
-    TimeOfLastDebounce = millis(); // Set variable to current millis() timer
+  if ((millis() - TimeOfLastDebounce) > DelayofDebounce) {
+    unsigned int A = digitalRead(encoder0PinA);
+    unsigned int B = digitalRead(encoder0PinB);
+  
+    // A xor B == true ? increment, otherwise decrement
+    A ^ B ? encoder0Pos++ : encoder0Pos--;
+  //  // check for underflow (< 0)
+  //  if (bitRead(encoder0Pos, 15) == 1) encoder0Pos = 0;
+  //  // check for overflow (> 1023)
+  //  if (bitRead(encoder0Pos, 10) == 1) encoder0Pos = 1023;
+  //  constrain(encoder0Pos, 0, 1023);
   }
 }
