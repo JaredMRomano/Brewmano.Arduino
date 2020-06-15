@@ -1,4 +1,4 @@
 {
     "board": "arduino:avr:uno",
-    "sketch": "Brewmano.Main\\Main.ino"
+    "sketch": "src\\Main\\Main.ino"
 }
