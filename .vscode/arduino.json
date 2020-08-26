@@ -1,4 +1,5 @@
 {
     "board": "arduino:avr:uno",
-    "sketch": "src\\Main\\Main.ino"
+    "sketch": "Millis\\Millis\\Millis.ino",
+    "port": "COM24"
 }
