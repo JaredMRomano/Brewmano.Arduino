@@ -1,124 +1,221 @@
-#include <LiquidCrystal_I2C.h>
+#include <Arduino.h>
 
-//Libraries & global include
+/********************
+Arduino generic menu system
+Arduino menu using clickEncoder and I2C LCD
+
+Sep.2014 Rui Azevedo - ruihfazevedo(@rrob@)gmail.com
+Feb.2018 Ken-Fitz - https://github.com/Ken-Fitz
+
+LCD library:
+https://bitbucket.org/fmalpartida/new-liquidcrystal/wiki/Home
+http://playground.arduino.cc/Code/LCD3wires
+*/
+
 #include <Wire.h>
-//#include <LiquidCrystal_I2C.h>
-LiquidCrystal_I2C lcd(0x27, 20,4);
+#include <LiquidCrystal_I2C.h> //F. Malpartida LCD's driver
+#include <menu.h>              //menu macros and objects
+#include <menuIO/lcdOut.h>     //malpartidas lcd menu output
+#include <TimerOne.h>
+#include <ClickEncoder.h>
+#include <menuIO/clickEncoderIn.h>
+#include <menuIO/keyIn.h>
+#include <menuIO/chainStream.h>
+#include <menuIO/serialOut.h>
+#include <menuIO/serialIn.h>
+#include "config.h"
+#include <TaskScheduler.h>
 
-// Rotary Encoder Module connections
-const int encoder0PinA = 2; // CLOCK signal
-const int encoder0PinB = 3; // DATA signal
-const int PinSW = 5;        // Rotary Encoder Switch
-volatile byte encoder0Pos = 0;
-byte oldEncoder0Position = 0;
+using namespace Menu;
 
-// Variables to debounce Rotary Encoder
-long TimeOfLastDebounce = 0;
-int DelayofDebounce = 0.02;
-bool PrintDisplayCounter = true;
+// Scheduler
+void menuTaskCallback();
+void encoderTaskCallback();
+Task menuTask(500, TASK_FOREVER, &menuTaskCallback);
+Task encoderTask(1, TASK_FOREVER, &encoderTaskCallback);
+Scheduler scheduler;
 
-// Variables for timer
-long TimerStartTime = 0;
-bool IsTimerRunning = false;
+// LCD
+LiquidCrystal_I2C lcd(LCD_I2C_Addr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); // Set the LCD I2C address and pinout
+
+// Click Encodeer
+ClickEncoder clickEncoder(ENC_PIN_DT, ENC_PIN_CLK, ENC_PIN_BTN, 2);
+ClickEncoderStream encStream(clickEncoder, 1);
+
+// Init menu input
+MENU_INPUTS(in, &encStream);
+void encoderTaskCallback() { clickEncoder.service(); }
+void timerIsr() { clickEncoder.service(); }
+
+result doAlert(eventMask e, prompt &item);
+
+result showEvent(eventMask e, navNode &nav, prompt &item)
+{
+  Serial.print("event: ");
+  Serial.println(e);
+  return proceed;
+}
+
+int test = 55;
+
+result action1(eventMask e, navNode &nav, prompt &item)
+{
+  Serial.print("action1 event: ");
+  Serial.print(e);
+  Serial.println(", proceed menu");
+  Serial.flush();
+  return proceed;
+}
+
+result action2(eventMask e, navNode &nav, prompt &item)
+{
+  Serial.print("action2 event: ");
+  Serial.print(e);
+  Serial.println(", quiting menu.");
+  Serial.flush();
+  return quit;
+}
+
+int ledCtrl = LOW;
+
+result myLedOn()
+{
+  ledCtrl = HIGH;
+  return proceed;
+}
+result myLedOff()
+{
+  ledCtrl = LOW;
+  return proceed;
+}
+
+TOGGLE(ledCtrl, setLed, "Led: ", doNothing, noEvent, noStyle //,doExit,enterEvent,noStyle
+       ,
+       VALUE("On", HIGH, doNothing, noEvent), VALUE("Off", LOW, doNothing, noEvent));
+
+int selTest = 0;
+SELECT(selTest, selMenu, "Select", doNothing, noEvent, noStyle, VALUE("Zero", 0, doNothing, noEvent), VALUE("One", 1, doNothing, noEvent), VALUE("Two", 2, doNothing, noEvent));
+
+int chooseTest = -1;
+CHOOSE(chooseTest, chooseMenu, "Choose", doNothing, noEvent, noStyle, VALUE("First", 1, doNothing, noEvent), VALUE("Second", 2, doNothing, noEvent), VALUE("Third", 3, doNothing, noEvent), VALUE("Last", -1, doNothing, noEvent));
+
+//customizing a prompt look!
+//by extending the prompt class
+class altPrompt : public prompt
+{
+public:
+  altPrompt(constMEM promptShadow &p) : prompt(p) {}
+  Used printTo(navRoot &root, bool sel, menuOut &out, idx_t idx, idx_t len, idx_t) override
+  {
+    return out.printRaw(F("special prompt!"), len);
+    ;
+  }
+};
+
+MENU(subMenu, "Sub-Menu", showEvent, anyEvent, noStyle, OP("Sub1", showEvent, anyEvent), OP("Sub2", showEvent, anyEvent), OP("Sub3", showEvent, anyEvent), altOP(altPrompt, "", showEvent, anyEvent), EXIT("<Back"));
+
+/*extern menu mainMenu;
+TOGGLE((mainMenu[1].enabled),togOp,"Op 2:",doNothing,noEvent,noStyle
+  ,VALUE("Enabled",enabledStatus,doNothing,noEvent)
+  ,VALUE("disabled",disabledStatus,doNothing,noEvent)
+);*/
+
+char *constMEM hexDigit MEMMODE = "0123456789ABCDEF";
+char *constMEM hexNr[] MEMMODE = {"0", "x", hexDigit, hexDigit};
+char buf1[] = "0x11";
+
+MENU(mainMenu, "Main menu", doNothing, noEvent, wrapStyle, OP("OpA", action1, anyEvent), OP("OpB", action2, enterEvent)
+     //,SUBMENU(togOp)
+     ,
+     FIELD(test, "Test", "%", 0, 100, 10, 1, doNothing, noEvent, wrapStyle), SUBMENU(subMenu), SUBMENU(setLed), OP("LED On", myLedOn, enterEvent), OP("LED Off", myLedOff, enterEvent), SUBMENU(selMenu), SUBMENU(chooseMenu), OP("Alert test", doAlert, enterEvent), EDIT("Hex", buf1, hexNr, doNothing, noEvent, noStyle), EXIT("<Back"));
+
+#define MAX_DEPTH 2
+
+/*const panel panels[] MEMMODE={{0,0,16,2}};
+navNode* nodes[sizeof(panels)/sizeof(panel)];
+panelsList pList(panels,nodes,1);
+idx_t tops[MAX_DEPTH];
+lcdOut outLCD(&lcd,tops,pList);//output device for LCD
+menuOut* constMEM outputs[] MEMMODE={&outLCD};//list of output devices
+outputsList out(outputs,1);//outputs list with 2 outputs
+*/
+
+MENU_OUTPUTS(out, MAX_DEPTH, LCD_OUT(lcd, {0, 0, 20, 4}), NONE);
+NAVROOT(nav, mainMenu, MAX_DEPTH, in, out); //the navigation root object
+
+result alert(menuOut &o, idleEvent e)
+{
+  if (e == idling)
+  {
+    o.setCursor(0, 0);
+    o.print("alert test");
+    o.setCursor(0, 1);
+    o.print("[select] to continue...");
+  }
+  return proceed;
+}
+
+result doAlert(eventMask e, prompt &item)
+{
+  nav.idleOn(alert);
+  return proceed;
+}
+
+result idle(menuOut &o, idleEvent e)
+{
+  switch (e)
+  {
+  case idleStart:
+    o.print("suspending menu!");
+    break;
+  case idling:
+    o.print("suspended...");
+    break;
+  case idleEnd:
+    o.print("resuming menu.");
+    break;
+  }
+  return proceed;
+}
+
+void menuTaskCallback()
+{
+  nav.poll();
+  digitalWrite(LED_BUILTIN, ledCtrl);
+  Serial.println("HERE");
+}
 
 void setup()
 {
-  lcd.init();
-  lcd.setBacklight(LCD_BACKLIGHT);
-  lcd.clear();
-  lcd.setCursor(0,0);
+  pinMode(ENC_PIN_BTN, INPUT_PULLUP);
+  pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
+  while (!Serial)
+    ;
+  Serial.println("Arduino Menu Library");
+  Serial.flush();
+  lcd.begin(20, 4);
 
-
-
-  lcd.print(encoder0Pos);
-  initializeRotaryEncoder();
+  // Init scheduler 
+  scheduler.init();
+  scheduler.addTask(menuTask);
+  scheduler.addTask(encoderTask);
+  menuTask.enable();
+  encoderTask.enable();
+  
+  nav.idleTask = idle; //point a function to be used when menu is suspended
+  mainMenu[1].enabled = disabledStatus;
+  nav.showTitle = false;
+  lcd.setCursor(0, 0);
+  lcd.print("Menu 4.x LCD");
+  lcd.setCursor(0, 1);
+  lcd.print("r-site.net");
+ // Timer1.initialize(1000);
+  //Timer1.attachInterrupt(timerIsr);
+  delay(2000);
 }
 
 void loop()
 {
-  
-  if (oldEncoder0Position != encoder0Pos)
-  {
-    oldEncoder0Position = encoder0Pos;
-    // Do encoder moved stuff stuff
-    //Ex:
-    printDisplayCounter();
-     Serial.print(encoder0Pos);
-     Serial.print(oldEncoder0Position);
-     Serial.println();
-  }
-//  // Check if Rotary Encoder switch was pressed
-//  if (digitalRead(PinSW) == LOW)
-//  {
-//    // Do button pressed stuff
-//    printDisplayCounter();
-//  }
-}
-
-// Returns true if the encoder has moved from last position
-bool hasEncoderMoved()
-{
-  if (oldEncoder0Position != encoder0Pos)
-  {
-    oldEncoder0Position = encoder0Pos;
-    return true;
-  }
-  else
-  {
-    return false;
-  }
-  
-}
-
-void printDisplayCounter()
-{
-  if (PrintDisplayCounter)
-  {
-    lcd.clear();
-    lcd.print(encoder0Pos);
-  }
-}
-
-void print_1Line(String output)
-{
-  lcd.clear();
-  lcd.print(output);
-}
-
-void print_2Line(String output, String output2)
-{
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.write(1);
-  lcd.print(output);
-  lcd.setCursor(0, 1);
-  lcd.print(output2);
-}
-
-void initializeRotaryEncoder()
-{
-  pinMode(encoder0PinA, INPUT);
-  pinMode(encoder0PinB, INPUT);
-  // encoder pin on interrupt 0 (pin 2)
-  attachInterrupt(0, doEncoder, CHANGE);
-  // encoder pin on interrupt 1 (pin 3)
-  //attachInterrupt(1, doEncoder, CHANGE);
-}
-
-// Interrupt on A changing state
-void doEncoder()
-{
-  if ((millis() - TimeOfLastDebounce) > DelayofDebounce) {
-    unsigned int A = digitalRead(encoder0PinA);
-    unsigned int B = digitalRead(encoder0PinB);
-  
-    // A xor B == true ? increment, otherwise decrement
-    A ^ B ? encoder0Pos++ : encoder0Pos--;
-  //  // check for underflow (< 0)
-  //  if (bitRead(encoder0Pos, 15) == 1) encoder0Pos = 0;
-  //  // check for overflow (> 1023)
-  //  if (bitRead(encoder0Pos, 10) == 1) encoder0Pos = 1023;
-  //  constrain(encoder0Pos, 0, 1023);
-  }
+  scheduler.execute();
 }
