@@ -1,18 +1,68 @@
 {
     "configurations": [
         {
+            "name": "!!! WARNING !!! AUTO-GENERATED FILE, PLEASE DO NOT MODIFY IT AND USE https://docs.platformio.org/page/projectconf/section_env_build.html#build-flags"
+        },
+        {
             "name": "Win32",
             "includePath": [
-                "C:\\Program Files (x86)\\Arduino\\tools\\**",
-                "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\**"
+                "c:/Users/jromo/Source/Repos/Brewmano/include",
+                "c:/Users/jromo/Source/Repos/Brewmano/src",
+                "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/DS1307RTC",
+                "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/Time",
+                "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/ArduinoMenu library/src",
+                "c:/Users/jromo/Source/Repos/Brewmano/lib/New-LiquidCrystal",
+                "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
+                "c:/Users/jromo/Source/Repos/Brewmano/lib/encoder",
+                "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/TaskScheduler/src",
+                "C:/Users/jromo/.platformio/packages/framework-arduino-avr/cores/arduino",
+                "C:/Users/jromo/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
+                "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
+                "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/HID/src",
+                "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
+                "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
+                "C:/Users/jromo/.platformio/packages/tool-unity",
+                ""
             ],
-            "forcedInclude": [
-                "C:\\Program Files (x86)\\Arduino\\hardware\\arduino\\avr\\cores\\arduino\\Arduino.h"
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true,
+                "path": [
+                    "c:/Users/jromo/Source/Repos/Brewmano/include",
+                    "c:/Users/jromo/Source/Repos/Brewmano/src",
+                    "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/DS1307RTC",
+                    "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/Time",
+                    "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/ArduinoMenu library/src",
+                    "c:/Users/jromo/Source/Repos/Brewmano/lib/New-LiquidCrystal",
+                    "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
+                    "c:/Users/jromo/Source/Repos/Brewmano/lib/encoder",
+                    "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/TaskScheduler/src",
+                    "C:/Users/jromo/.platformio/packages/framework-arduino-avr/cores/arduino",
+                    "C:/Users/jromo/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
+                    "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
+                    "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/HID/src",
+                    "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
+                    "C:/Users/jromo/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
+                    "C:/Users/jromo/.platformio/packages/tool-unity",
+                    ""
+                ]
+            },
+            "defines": [
+                "PLATFORMIO=50001",
+                "ARDUINO_AVR_NANO",
+                "F_CPU=16000000L",
+                "ARDUINO_ARCH_AVR",
+                "ARDUINO=10808",
+                "__AVR_ATmega328P__",
+                ""
             ],
-            "intelliSenseMode": "msvc-x64",
-            "compilerPath": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/Tools/MSVC/14.25.28610/bin/Hostx64/x64/cl.exe",
+            "intelliSenseMode": "clang-x64",
             "cStandard": "c11",
-            "cppStandard": "c++17"
+            "cppStandard": "c++11",
+            "compilerPath": "C:/Users/jromo/.platformio/packages/toolchain-atmelavr/bin/avr-gcc.exe",
+            "compilerArgs": [
+                "-mmcu=atmega328p",
+                ""
+            ]
         }
     ],
     "version": 4
