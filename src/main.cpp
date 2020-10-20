@@ -12,16 +12,28 @@
 #include <config.h>
 #include <TaskScheduler.h>
 
-#include <Time.h>
-#include <DS1307RTC.h>
+//#include "TimeModule.h"
 
 using namespace Menu;
+
+// Time Module
+#include <Wire.h>
+#include <Time.h>
+#include <DS1307RTC.h>
+const char *monthName[12] = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+tmElements_t tm;
+//TimeModule tm;
 
 // Scheduler
 void menuTaskCallback();
 void encoderTaskCallback();
+void timeTaskCallback();
 Task menuTask(500, TASK_FOREVER, &menuTaskCallback);
 Task encoderTask(1, TASK_FOREVER, &encoderTaskCallback);
+Task TimeTask(250, TASK_FOREVER, &timeTaskCallback);
 Scheduler scheduler;
 
 // LCD
@@ -35,58 +47,6 @@ ClickEncoderStream encStream(clickEncoder, 1);
 MENU_INPUTS(in, &encStream);
 void encoderTaskCallback() { clickEncoder.service(); }
 void timerIsr() { clickEncoder.service(); }
-
-// Time
-tmElements_t tm;
-const char *monthName[12] = {
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-
-bool getTime(const char *str)
-{
-  int Hour, Min, Sec;
-
-  if (sscanf(str, "%d:%d:%d", &Hour, &Min, &Sec) != 3)
-    return false;
-  tm.Hour = Hour;
-  tm.Minute = Min;
-  tm.Second = Sec;
-  return true;
-}
-
-bool getDate(const char *str)
-{
-  char Month[12];
-  int Day, Year;
-  uint8_t monthIndex;
-
-  if (sscanf(str, "%s %d %d", Month, &Day, &Year) != 3)
-    return false;
-  for (monthIndex = 0; monthIndex < 12; monthIndex++)
-  {
-    if (strcmp(Month, monthName[monthIndex]) == 0)
-      break;
-  }
-  if (monthIndex >= 12)
-    return false;
-  tm.Day = Day;
-  tm.Month = monthIndex + 1;
-  tm.Year = CalendarYrToTm(Year);
-  return true;
-}
-
-void InitTime(void)
-{
-  // get the date and time the compiler was run
-  if (getDate(__DATE__) && getTime(__TIME__))
-  {
-    // and configure the RTC with this info
-    RTC.write(tm);   
-  }
-}
-
-
-
 result doAlert(eventMask e, prompt &item);
 
 result showEvent(eventMask e, navNode &nav, prompt &item)
@@ -129,15 +89,89 @@ result myLedOff()
   return proceed;
 }
 
-// uint16_t year1 = 2017;
-// uint16_t month1 = 10;
-// uint16_t day1 = 7;
+bool getTime(const char *str)
+{
+  int Hour, Min, Sec;
 
-// //Time Display Menu
-// PADMENU(dayTime, "dayTime", doNothing, noEvent, noStyle,
-//         FIELD((&uint16_t) tm.Year, "", "/", 1900, 3000, 20, 1, doNothing, noEvent, noStyle),
-//         FIELD(month1, "", "/", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
-//         FIELD(day1, "", "", 1, 31, 1, 0, doNothing, noEvent, wrapStyle));
+  if (sscanf(str, "%d:%d:%d", &Hour, &Min, &Sec) != 3)
+    return false;
+  tm.Hour = Hour;
+  tm.Minute = Min;
+  tm.Second = Sec;
+  return true;
+}
+
+bool getDate(const char *str)
+{
+  char Month[12];
+  int Day, Year;
+  uint8_t monthIndex;
+
+  if (sscanf(str, "%s %d %d", Month, &Day, &Year) != 3)
+    return false;
+  for (monthIndex = 0; monthIndex < 12; monthIndex++)
+  {
+    if (strcmp(Month, monthName[monthIndex]) == 0)
+      break;
+  }
+  if (monthIndex >= 12)
+    return false;
+  tm.Day = Day;
+  tm.Month = monthIndex + 1;
+  tm.Year = CalendarYrToTm(Year);
+  return true;
+}
+
+int m_year;
+int m_month;
+int m_day;
+int m_hour;
+int m_minute;
+int m_second;
+int m_amPm;
+
+void timeTaskCallback()
+{
+  RTC.read(tm);
+  time_t time = makeTime(tm);
+  m_year = tmYearToCalendar(tm.Year);
+  m_month = tm.Month;
+  m_day = tm.Day;
+  m_hour = hour(time);
+  m_minute = tm.Minute;
+  m_second = tm.Second;
+
+  m_amPm = isAM(time) ? 0 : 1;
+}
+
+//Time Display Menus
+SELECT(m_amPm, selAmPmMenu, "", doNothing, noEvent, noStyle,
+       VALUE("AM", 0, doNothing, noEvent),
+       VALUE("PM", 1, doNothing, noEvent));
+
+PADMENU(timeBanner, "", doNothing, noEvent, noStyle,
+        FIELD(m_month, "", "/", 1, 12, 1, 0, doNothing, noEvent, noStyle),
+        FIELD(m_day, "", "/", 1, 31, 1, 0, doNothing, noEvent, wrapStyle),
+        FIELD(m_year, "", " ", 1900, 3000, 20, 1, doNothing, noEvent, wrapStyle),
+        FIELD(m_hour, "", ":", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
+        FIELD(m_minute, "", ":", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
+        FIELD(m_second, "", " ", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
+        SUBMENU(selAmPmMenu));
+// End Time Display Menus
+
+//Initial Screen
+int majorVersion = 1;
+int minorVersion = 0;
+
+PADMENU(titleBanner, "Brewmano ", doNothing, noEvent, noStyle,
+        FIELD(majorVersion, "", "", 0, 30, 1, 0, doNothing, noEvent, noStyle),
+        FIELD(minorVersion, "", "", 0, 30, 1, 0, doNothing, noEvent, noStyle));
+
+// Menu(initialScreen, "", doNothing, noEvent, noStyle,
+//      SUBMENU(timeBanner),
+//      SUBMENU(titleBanner),
+//      );
+// End Initial Screen
 
 TOGGLE(ledCtrl, setLed, "Led: ", doNothing, noEvent, noStyle //,doExit,enterEvent,noStyle
        ,
@@ -257,6 +291,14 @@ void setup()
   Serial.flush();
   lcd.begin(20, 4);
 
+  //Init Time Module
+  // get the date and time the compiler was run
+  if (getDate(__DATE__) && getTime(__TIME__))
+  {
+    // and configure the RTC with this info
+    RTC.write(tm);
+  }
+
   // Init scheduler
   scheduler.init();
   scheduler.addTask(menuTask);
@@ -266,6 +308,7 @@ void setup()
 
   nav.idleTask = idle; //point a function to be used when menu is suspended
   mainMenu[1].enabled = disabledStatus;
+  timeBanner[1].disable();
   nav.showTitle = false;
   lcd.setCursor(0, 0);
   lcd.print("Menu 4.x LCD");
