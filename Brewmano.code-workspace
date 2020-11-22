@@ -3,6 +3,9 @@
 	{
 		"name": "Brewmano",
 		"path": "."
+	},
+	{
+		"path": "..\\Brewmano.Arduino"
 	}
 ],
   "settings": {}
