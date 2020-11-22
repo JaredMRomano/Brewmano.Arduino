@@ -211,6 +211,8 @@ char buf1[] = "0x11";
 
 // Main Menu
 MENU(mainMenu, "Main menu", doNothing, noEvent, wrapStyle,
+     SUBMENU(titleBanner),
+     SUBMENU(timeBanner),
      OP("OpA", action1, anyEvent),
      OP("OpB", action2, enterEvent)
      //,SUBMENU(togOp)
