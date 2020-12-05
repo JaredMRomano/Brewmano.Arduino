@@ -26,14 +26,8 @@ const char *monthName[12] = {
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
-tmElements_t tm;
-int m_year;
-int m_month;
-int m_day;
-int m_hour;
-int m_minute;
-int m_second;
-int m_amPm;
+tmElements_t compileTime;
+tmElements_t rtcTime;
 
 int motorPercent = 0;
 int motorRelayValue = LOW;
@@ -83,9 +77,9 @@ bool getTime(const char *str)
 
   if (sscanf(str, "%d:%d:%d", &Hour, &Min, &Sec) != 3)
     return false;
-  tm.Hour = Hour;
-  tm.Minute = Min;
-  tm.Second = Sec;
+  compileTime.Hour = Hour;
+  compileTime.Minute = Min;
+  compileTime.Second = Sec;
   return true;
 }
 
@@ -104,9 +98,9 @@ bool getDate(const char *str)
   }
   if (monthIndex >= 12)
     return false;
-  tm.Day = Day;
-  tm.Month = monthIndex + 1;
-  tm.Year = CalendarYrToTm(Year);
+  compileTime.Day = Day;
+  compileTime.Month = monthIndex + 1;
+  compileTime.Year = CalendarYrToTm(Year);
   return true;
 }
 
@@ -117,19 +111,15 @@ void encoderTaskCallback()
 
 void timeTaskCallback()
 {
-  RTC.read(tm);
-  time_t time = makeTime(tm);
-  m_year = tmYearToCalendar(tm.Year);
-  m_month = tm.Month;
-  m_day = tm.Day;
-  m_hour = hour(time);
-  m_minute = tm.Minute;
-  m_second = tm.Second;
-
-  m_amPm = isAM(time) ? 0 : 1;
+  RTC.read(rtcTime);
+  time_t time = makeTime(rtcTime);
+  // m_year = m_year = tmYearToCalendar(tm.Year);  
+  // m_month = tm.Month;
+  // m_day = tm.Day;
+  // m_amPm = isAM(time) ? 0 : 1;
 
   char buf[12];
-  sprintf(buf, "%2d:%02d:%02d %s", m_hour, m_minute, m_second, m_amPm ? "AM" : "PM");
+  sprintf(buf, "%2d:%02d:%02d %s", hour(time), rtcTime.Minute, rtcTime.Second, isAM(time) ? "AM" : "PM");
   lcd.setCursor(0, 0);
   lcd.print(buf);
 }
@@ -172,11 +162,17 @@ void setup()
   lcd.begin(20, 4);
 
   //Init Time Module
+  RTC.read(rtcTime);
   // get the date and time the compiler was run
   if (getDate(__DATE__) && getTime(__TIME__))
   {
-    // and configure the RTC with this info
-    RTC.write(tm);
+    time_t rtc_t = makeTime(rtcTime);
+    time_t compile_t = makeTime(compileTime);
+    // Check if the compile time is greater than the RTC time
+    if (compile_t > rtc_t)
+    {
+      RTC.write(compileTime);
+    }
   }
 
   // Init scheduler
