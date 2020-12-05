@@ -9,6 +9,7 @@
 #include <menuIO/chainStream.h>
 #include "config.h"
 #include <TaskScheduler.h>
+#include <Bounce2.h>
 
 //#include "TimeModule.h"
 
@@ -37,6 +38,10 @@ int m_amPm;
 int motorPercent = 0;
 int motorRelayValue = LOW;
 
+Bounce *motorOverrideButton = new Bounce();
+
+void ChangeMotorOutput();
+
 // Scheduler Callbacks
 void menuTaskCallback();
 void encoderTaskCallback();
@@ -47,10 +52,8 @@ void motorTaskCallback();
 Task menuTask(500, TASK_FOREVER, &menuTaskCallback);
 Task encoderTask(1, TASK_FOREVER, &encoderTaskCallback);
 Task timeTask(100, TASK_FOREVER, &timeTaskCallback);
-Task motorTask(10, TASK_FOREVER, &motorTaskCallback);
+Task motorTask(100, TASK_FOREVER, &motorTaskCallback);
 Scheduler scheduler;
-
-void ChangeMotorOutput();
 
 // LCD
 LiquidCrystal_I2C lcd(LCD_I2C_Addr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); // Set the LCD I2C address and pinout
@@ -61,23 +64,9 @@ ClickEncoderStream encStream(clickEncoder, 1);
 
 // Init menu input
 MENU_INPUTS(in, &encStream);
-void encoderTaskCallback() { clickEncoder.service(); }
-result doAlert(eventMask e, prompt &item);
 
-//Time Display Menus
-// SELECT(m_amPm, selAmPmMenu, "", doNothing, noEvent, noStyle,
-//        VALUE("AM", 0, doNothing, noEvent),
-//        VALUE("PM", 1, doNothing, noEvent));
-
-// PADMENU(timeBanner, "", doNothing, noEvent, noStyle,
-//         FIELD(m_hour, "", ":", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
-//         FIELD(m_minute, "", ":", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
-//         FIELD(m_second, "", " ", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
-//         SUBMENU(selAmPmMenu));
-// End Time Display Menus
-
-TOGGLE(motorRelayValue, setMotorRelay, "Motor: ", doNothing, noEvent, noStyle //,doExit,enterEvent,noStyle
-       ,
+// Motor on off menu object
+TOGGLE(motorRelayValue, setMotorRelay, "Motor: ", doNothing, noEvent, noStyle,
        VALUE("On", HIGH, doNothing, noEvent), VALUE("Off", LOW, doNothing, noEvent));
 
 // Main Menu
@@ -86,7 +75,7 @@ MENU(mainMenu, "Main menu", doNothing, noEvent, wrapStyle,
      FIELD(motorPercent, "Motor", "%", 0, 100, 10, 0, ChangeMotorOutput, anyEvent, noStyle));
 
 MENU_OUTPUTS(out, MAX_DEPTH, LCD_OUT(lcd, {0, 1, 20, 3}), NONE);
-NAVROOT(nav, mainMenu, MAX_DEPTH, in, out); //the navigation root object
+NAVROOT(nav, mainMenu, MAX_DEPTH, in, out); 
 
 bool getTime(const char *str)
 {
@@ -121,6 +110,11 @@ bool getDate(const char *str)
   return true;
 }
 
+void encoderTaskCallback() 
+{ 
+  clickEncoder.service(); 
+}
+
 void timeTaskCallback()
 {
   RTC.read(tm);
@@ -134,18 +128,10 @@ void timeTaskCallback()
 
   m_amPm = isAM(time) ? 0 : 1;
 
+  char buf[12];
+  sprintf(buf, "%2d:%02d:%02d %s", m_hour, m_minute, m_second, m_amPm ? "AM" : "PM");
   lcd.setCursor(0, 0);
-  lcd.print(m_hour, DEC);
-  lcd.setCursor(2, 0); 
-  lcd.print(":");
-  lcd.setCursor(3, 0); 
-  lcd.print(m_minute, DEC);
-  lcd.setCursor(5, 0);
-  lcd.print(":");
-  lcd.setCursor(6, 0);
-  lcd.print(m_second, DEC);
-  lcd.setCursor(8, 0);
-  lcd.print(m_amPm ? "AM" : "PM");
+  lcd.print(buf);
 }
 
 void ChangeMotorOutput()
@@ -157,28 +143,32 @@ void ChangeMotorOutput()
 
 void menuTaskCallback()
 {
+  // Run menu functions
   nav.poll();
 }
 
 void motorTaskCallback()
 {
-  // Check if motor override id pressed
-  if (digitalRead(Mot_OVERRIDE_PIN) == LOW)
-  {
-    motorRelayValue = motorRelayValue ? LOW : HIGH;
-  }
-
   // Set motor relay
   digitalWrite(Mot_RELAY_PIN, motorRelayValue);
 }
 
 void setup()
 {
+  //Init Motor pins
+  pinMode(Mot_PIN, OUTPUT);
+  pinMode(Mot_RELAY_PIN, OUTPUT);
+  motorOverrideButton->attach(Mot_OVERRIDE_PIN, INPUT_PULLUP); //setup the bounce instance for the current button
+  motorOverrideButton->interval(25);
+
+  // Init Encoder pins
   pinMode(ENC_PIN_BTN, INPUT_PULLUP);
   pinMode(LED_BUILTIN, OUTPUT);
+
+  // Init Serial and LCD
   Serial.begin(9600);
   while (!Serial)
-    ;
+    ;    
   lcd.begin(20, 4);
 
   //Init Time Module
@@ -191,24 +181,31 @@ void setup()
 
   // Init scheduler
   scheduler.init();
+
+  // Init Scheduler Tasks
   scheduler.addTask(menuTask);
   scheduler.addTask(encoderTask);
   scheduler.addTask(timeTask);
   scheduler.addTask(motorTask);
+
+  // Enable Scheduler Tasks
   menuTask.enable();
   encoderTask.enable();
   timeTask.enable();
   motorTask.enable();
-
-  //Init Motor pins
-  pinMode(Mot_PIN, OUTPUT);
-  pinMode(Mot_RELAY_PIN, OUTPUT);
-  pinMode(Mot_OVERRIDE_PIN, INPUT);
 
   nav.showTitle = false;
 }
 
 void loop()
 {
+  // Execute the scheduler
   scheduler.execute();
+
+  // Check if buttons have been pressed
+  motorOverrideButton->update();
+  if (motorOverrideButton->fell())
+  {
+    motorRelayValue = motorRelayValue ? LOW : HIGH;
+  }
 }

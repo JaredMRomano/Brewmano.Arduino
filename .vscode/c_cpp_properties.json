@@ -8,6 +8,7 @@
             "includePath": [
                 "c:/Users/jromo/Source/Repos/Brewmano/include",
                 "c:/Users/jromo/Source/Repos/Brewmano/src",
+                "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/Bounce2/src",
                 "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/DS1307RTC",
                 "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/Time",
                 "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/ArduinoMenu library/src",
@@ -29,6 +30,7 @@
                 "path": [
                     "c:/Users/jromo/Source/Repos/Brewmano/include",
                     "c:/Users/jromo/Source/Repos/Brewmano/src",
+                    "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/Bounce2/src",
                     "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/DS1307RTC",
                     "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/Time",
                     "c:/Users/jromo/Source/Repos/Brewmano/.pio/libdeps/nanoatmega328/ArduinoMenu library/src",
