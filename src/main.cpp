@@ -18,22 +18,39 @@ using namespace Menu;
 #include <Wire.h>
 #include <Time.h>
 #include <DS1307RTC.h>
+
+#define MAX_DEPTH 2
+
 const char *monthName[12] = {
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
 tmElements_t tm;
-//TimeModule tm;
-int motorPercent = 0;
+int m_year;
+int m_month;
+int m_day;
+int m_hour;
+int m_minute;
+int m_second;
+int m_amPm;
 
-// Scheduler
+int motorPercent = 0;
+int motorRelayValue = LOW;
+
+// Scheduler Callbacks
 void menuTaskCallback();
 void encoderTaskCallback();
 void timeTaskCallback();
+void motorTaskCallback();
+
+// Scheduler Tasks
 Task menuTask(500, TASK_FOREVER, &menuTaskCallback);
 Task encoderTask(1, TASK_FOREVER, &encoderTaskCallback);
-Task TimeTask(100, TASK_FOREVER, &timeTaskCallback);
+Task timeTask(100, TASK_FOREVER, &timeTaskCallback);
+Task motorTask(10, TASK_FOREVER, &motorTaskCallback);
 Scheduler scheduler;
+
+void ChangeMotorOutput();
 
 // LCD
 LiquidCrystal_I2C lcd(LCD_I2C_Addr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); // Set the LCD I2C address and pinout
@@ -46,6 +63,30 @@ ClickEncoderStream encStream(clickEncoder, 1);
 MENU_INPUTS(in, &encStream);
 void encoderTaskCallback() { clickEncoder.service(); }
 result doAlert(eventMask e, prompt &item);
+
+//Time Display Menus
+// SELECT(m_amPm, selAmPmMenu, "", doNothing, noEvent, noStyle,
+//        VALUE("AM", 0, doNothing, noEvent),
+//        VALUE("PM", 1, doNothing, noEvent));
+
+// PADMENU(timeBanner, "", doNothing, noEvent, noStyle,
+//         FIELD(m_hour, "", ":", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
+//         FIELD(m_minute, "", ":", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
+//         FIELD(m_second, "", " ", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
+//         SUBMENU(selAmPmMenu));
+// End Time Display Menus
+
+TOGGLE(motorRelayValue, setMotorRelay, "Motor: ", doNothing, noEvent, noStyle //,doExit,enterEvent,noStyle
+       ,
+       VALUE("On", HIGH, doNothing, noEvent), VALUE("Off", LOW, doNothing, noEvent));
+
+// Main Menu
+MENU(mainMenu, "Main menu", doNothing, noEvent, wrapStyle,
+     SUBMENU(setMotorRelay),
+     FIELD(motorPercent, "Motor", "%", 0, 100, 10, 0, ChangeMotorOutput, anyEvent, noStyle));
+
+MENU_OUTPUTS(out, MAX_DEPTH, LCD_OUT(lcd, {0, 1, 20, 3}), NONE);
+NAVROOT(nav, mainMenu, MAX_DEPTH, in, out); //the navigation root object
 
 bool getTime(const char *str)
 {
@@ -80,14 +121,6 @@ bool getDate(const char *str)
   return true;
 }
 
-int m_year;
-int m_month;
-int m_day;
-int m_hour;
-int m_minute;
-int m_second;
-int m_amPm;
-
 void timeTaskCallback()
 {
   RTC.read(tm);
@@ -100,19 +133,20 @@ void timeTaskCallback()
   m_second = tm.Second;
 
   m_amPm = isAM(time) ? 0 : 1;
+
+  lcd.setCursor(0, 0);
+  lcd.print(m_hour, DEC);
+  lcd.setCursor(2, 0); 
+  lcd.print(":");
+  lcd.setCursor(3, 0); 
+  lcd.print(m_minute, DEC);
+  lcd.setCursor(5, 0);
+  lcd.print(":");
+  lcd.setCursor(6, 0);
+  lcd.print(m_second, DEC);
+  lcd.setCursor(8, 0);
+  lcd.print(m_amPm ? "AM" : "PM");
 }
-
-//Time Display Menus
-SELECT(m_amPm, selAmPmMenu, "", doNothing, noEvent, noStyle,
-       VALUE("AM", 0, doNothing, noEvent),
-       VALUE("PM", 1, doNothing, noEvent));
-
-PADMENU(timeBanner, "", doNothing, noEvent, noStyle,
-        FIELD(m_hour, "", ":", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
-        FIELD(m_minute, "", ":", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
-        FIELD(m_second, "", " ", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
-        SUBMENU(selAmPmMenu));
-// End Time Display Menus
 
 void ChangeMotorOutput()
 {
@@ -121,27 +155,21 @@ void ChangeMotorOutput()
   Serial.println(motorPercent);
 }
 
-int motorRelay = LOW;
-
-TOGGLE(motorRelay, setMotorRelay, "Motor: ", doNothing, noEvent, noStyle //,doExit,enterEvent,noStyle
-       ,
-       VALUE("On", HIGH, doNothing, noEvent), VALUE("Off", LOW, doNothing, noEvent));
-
-// Main Menu
-MENU(mainMenu, "Main menu", doNothing, noEvent, wrapStyle,
-     SUBMENU(timeBanner),
-     SUBMENU(setMotorRelay),
-     FIELD(motorPercent, "Motor", "%", 0, 100, 10, 1, ChangeMotorOutput, exitEvent, noStyle));
-
-#define MAX_DEPTH 2
-
-MENU_OUTPUTS(out, MAX_DEPTH, LCD_OUT(lcd, {0, 0, 20, 4}), NONE);
-NAVROOT(nav, mainMenu, MAX_DEPTH, in, out); //the navigation root object
-
 void menuTaskCallback()
 {
   nav.poll();
-  digitalWrite(Mot_RELAY_PIN, motorRelay);
+}
+
+void motorTaskCallback()
+{
+  // Check if motor override id pressed
+  if (digitalRead(Mot_OVERRIDE_PIN) == LOW)
+  {
+    motorRelayValue = motorRelayValue ? LOW : HIGH;
+  }
+
+  // Set motor relay
+  digitalWrite(Mot_RELAY_PIN, motorRelayValue);
 }
 
 void setup()
@@ -165,16 +193,18 @@ void setup()
   scheduler.init();
   scheduler.addTask(menuTask);
   scheduler.addTask(encoderTask);
-  scheduler.addTask(TimeTask);
+  scheduler.addTask(timeTask);
+  scheduler.addTask(motorTask);
   menuTask.enable();
   encoderTask.enable();
-  TimeTask.enable();
+  timeTask.enable();
+  motorTask.enable();
 
-  //Motor
+  //Init Motor pins
   pinMode(Mot_PIN, OUTPUT);
   pinMode(Mot_RELAY_PIN, OUTPUT);
+  pinMode(Mot_OVERRIDE_PIN, INPUT);
 
-  mainMenu[0].enabled = disabledStatus;
   nav.showTitle = false;
 }
 

@@ -12,3 +12,4 @@
 // Motor
 #define Mot_PIN 6
 #define Mot_RELAY_PIN 7
+#define Mot_OVERRIDE_PIN 8
