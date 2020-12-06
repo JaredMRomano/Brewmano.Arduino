@@ -26,7 +26,6 @@ const char *monthName[12] = {
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
-tmElements_t compileTime;
 tmElements_t rtcTime;
 
 int motorPercent = 0;
@@ -59,6 +58,12 @@ ClickEncoderStream encStream(clickEncoder, 1);
 // Init menu input
 MENU_INPUTS(in, &encStream);
 
+//Timer Menu
+PADMENU(timeBanner, "", doNothing, noEvent, noStyle,
+        FIELD(m_hour, "", ":", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
+        FIELD(m_minute, "", ":", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
+        FIELD(m_second, "", " ", 0, 60, 1, 0, doNothing, noEvent, wrapStyle);
+
 // Motor on off menu object
 TOGGLE(motorRelayValue, setMotorRelay, "Motor: ", doNothing, noEvent, noStyle,
        VALUE("On", HIGH, doNothing, noEvent), VALUE("Off", LOW, doNothing, noEvent));
@@ -69,21 +74,21 @@ MENU(mainMenu, "Main menu", doNothing, noEvent, wrapStyle,
      FIELD(motorPercent, "Motor", "%", 0, 100, 10, 0, ChangeMotorOutput, anyEvent, noStyle));
 
 MENU_OUTPUTS(out, MAX_DEPTH, LCD_OUT(lcd, {0, 1, 20, 3}), NONE);
-NAVROOT(nav, mainMenu, MAX_DEPTH, in, out); 
+NAVROOT(nav, mainMenu, MAX_DEPTH, in, out);
 
-bool getTime(const char *str)
+bool getTime(const char *str, tmElements_t &tm)
 {
   int Hour, Min, Sec;
 
   if (sscanf(str, "%d:%d:%d", &Hour, &Min, &Sec) != 3)
     return false;
-  compileTime.Hour = Hour;
-  compileTime.Minute = Min;
-  compileTime.Second = Sec;
+  tm.Hour = Hour;
+  tm.Minute = Min;
+  tm.Second = Sec;
   return true;
 }
 
-bool getDate(const char *str)
+bool getDate(const char *str, tmElements_t &tm)
 {
   char Month[12];
   int Day, Year;
@@ -98,14 +103,14 @@ bool getDate(const char *str)
   }
   if (monthIndex >= 12)
     return false;
-  compileTime.Day = Day;
-  compileTime.Month = monthIndex + 1;
-  compileTime.Year = CalendarYrToTm(Year);
+  tm.Day = Day;
+  tm.Month = monthIndex + 1;
+  tm.Year = CalendarYrToTm(Year);
   return true;
 }
 
 void encoderTaskCallback() 
-{ 
+{
   clickEncoder.service(); 
 }
 
@@ -113,7 +118,7 @@ void timeTaskCallback()
 {
   RTC.read(rtcTime);
   time_t time = makeTime(rtcTime);
-  // m_year = m_year = tmYearToCalendar(tm.Year);  
+  // m_year = m_year = tmYearToCalendar(tm.Year);
   // m_month = tm.Month;
   // m_day = tm.Day;
   // m_amPm = isAM(time) ? 0 : 1;
@@ -158,16 +163,18 @@ void setup()
   // Init Serial and LCD
   Serial.begin(9600);
   while (!Serial)
-    ;    
+    ;
   lcd.begin(20, 4);
 
   //Init Time Module
   RTC.read(rtcTime);
+  tmElements_t compileTime;
   // get the date and time the compiler was run
-  if (getDate(__DATE__) && getTime(__TIME__))
+  if (getDate(__DATE__, compileTime) && getTime(__TIME__, compileTime))
   {
     time_t rtc_t = makeTime(rtcTime);
     time_t compile_t = makeTime(compileTime);
+
     // Check if the compile time is greater than the RTC time
     if (compile_t > rtc_t)
     {
