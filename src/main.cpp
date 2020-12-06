@@ -30,6 +30,7 @@ tmElements_t rtcTime;
 
 int motorPercent = 0;
 int motorRelayValue = LOW;
+tmElements_t motorTimerTime;
 
 Bounce *motorOverrideButton = new Bounce();
 
@@ -40,13 +41,17 @@ void menuTaskCallback();
 void encoderTaskCallback();
 void timeTaskCallback();
 void motorTaskCallback();
+void motorTimerCountdown();
+bool MotorTimerOnEnable();
+void MotorTimerOnDisable();
 
 // Scheduler Tasks
+Scheduler scheduler;
 Task menuTask(500, TASK_FOREVER, &menuTaskCallback);
 Task encoderTask(1, TASK_FOREVER, &encoderTaskCallback);
 Task timeTask(100, TASK_FOREVER, &timeTaskCallback);
 Task motorTask(100, TASK_FOREVER, &motorTaskCallback);
-Scheduler scheduler;
+Task motorTimerTask(&motorTimerCountdown, &scheduler);
 
 // LCD
 LiquidCrystal_I2C lcd(LCD_I2C_Addr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); // Set the LCD I2C address and pinout
@@ -58,11 +63,18 @@ ClickEncoderStream encStream(clickEncoder, 1);
 // Init menu input
 MENU_INPUTS(in, &encStream);
 
+void StartTimer()
+{
+  int timeInSec = numberOfSeconds(makeTime(motorTimerTime));
+  motorTimerTask.set(1000, timeInSec, &motorTimerCountdown);
+  motorTimerTask.enable();
+}
+
 //Timer Menu
-PADMENU(timeBanner, "", doNothing, noEvent, noStyle,
-        FIELD(m_hour, "", ":", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
-        FIELD(m_minute, "", ":", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
-        FIELD(m_second, "", " ", 0, 60, 1, 0, doNothing, noEvent, wrapStyle);
+PADMENU(motorTimerMenu, "", StartTimer, exitEvent, noStyle,
+        FIELD(motorTimerTime.Hour, "", ":", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
+        FIELD(motorTimerTime.Minute, "", ":", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
+        FIELD(motorTimerTime.Second, "", " ", 0, 60, 1, 0, doNothing, noEvent, wrapStyle));
 
 // Motor on off menu object
 TOGGLE(motorRelayValue, setMotorRelay, "Motor: ", doNothing, noEvent, noStyle,
@@ -70,6 +82,7 @@ TOGGLE(motorRelayValue, setMotorRelay, "Motor: ", doNothing, noEvent, noStyle,
 
 // Main Menu
 MENU(mainMenu, "Main menu", doNothing, noEvent, wrapStyle,
+     SUBMENU(motorTimerMenu),
      SUBMENU(setMotorRelay),
      FIELD(motorPercent, "Motor", "%", 0, 100, 10, 0, ChangeMotorOutput, anyEvent, noStyle));
 
@@ -109,9 +122,9 @@ bool getDate(const char *str, tmElements_t &tm)
   return true;
 }
 
-void encoderTaskCallback() 
+void encoderTaskCallback()
 {
-  clickEncoder.service(); 
+  clickEncoder.service();
 }
 
 void timeTaskCallback()
@@ -148,6 +161,19 @@ void motorTaskCallback()
   digitalWrite(Mot_RELAY_PIN, motorRelayValue);
 }
 
+void motorTimerCountdown()
+{
+  Task &t = scheduler.currentTask();
+  time_t timeInSec = numberOfSeconds(makeTime(motorTimerTime));
+  timeInSec--;
+  breakTime(timeInSec, motorTimerTime);
+
+  if (t.isLastIteration())
+  {
+    motorRelayValue = LOW;
+  }
+}
+
 void setup()
 {
   //Init Motor pins
@@ -172,11 +198,8 @@ void setup()
   // get the date and time the compiler was run
   if (getDate(__DATE__, compileTime) && getTime(__TIME__, compileTime))
   {
-    time_t rtc_t = makeTime(rtcTime);
-    time_t compile_t = makeTime(compileTime);
-
     // Check if the compile time is greater than the RTC time
-    if (compile_t > rtc_t)
+    if (makeTime(compileTime) > makeTime(rtcTime))
     {
       RTC.write(compileTime);
     }
@@ -192,10 +215,7 @@ void setup()
   scheduler.addTask(motorTask);
 
   // Enable Scheduler Tasks
-  menuTask.enable();
-  encoderTask.enable();
-  timeTask.enable();
-  motorTask.enable();
+  scheduler.enableAll();
 
   nav.showTitle = false;
 }
@@ -210,5 +230,10 @@ void loop()
   if (motorOverrideButton->fell())
   {
     motorRelayValue = motorRelayValue ? LOW : HIGH;
+    if (motorRelayValue == LOW)
+    {
+      motorTimerTask.disable();
+      scheduler.deleteTask(motorTimerTask);
+    }
   }
 }
