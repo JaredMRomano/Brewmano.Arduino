@@ -21,7 +21,6 @@ using namespace Menu;
 #include <DS1307RTC.h>
 
 #define MAX_DEPTH 2
-
 const char *monthName[12] = {
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
@@ -30,28 +29,33 @@ tmElements_t rtcTime;
 
 int motorPercent = 0;
 int motorRelayValue = LOW;
-tmElements_t motorTimerTime;
+
+int countDownTimerMinutes = 0;
+int coundDownTimerSeconds = 0;
 
 Bounce *motorOverrideButton = new Bounce();
 
 void ChangeMotorOutput();
+void startTimerCountdownCallback();
+void resetCountdownTimer();
 
 // Scheduler Callbacks
 void menuTaskCallback();
 void encoderTaskCallback();
-void timeTaskCallback();
+void printTimesTaskCallback();
 void motorTaskCallback();
-void motorTimerCountdown();
+void TimerCountdownCallback();
 bool MotorTimerOnEnable();
 void MotorTimerOnDisable();
+void startTimerCountdownCallback();
 
 // Scheduler Tasks
 Scheduler scheduler;
 Task menuTask(500, TASK_FOREVER, &menuTaskCallback);
 Task encoderTask(1, TASK_FOREVER, &encoderTaskCallback);
-Task timeTask(100, TASK_FOREVER, &timeTaskCallback);
+Task timeTask(100, TASK_FOREVER, &printTimesTaskCallback);
 Task motorTask(100, TASK_FOREVER, &motorTaskCallback);
-Task motorTimerTask(&motorTimerCountdown, &scheduler);
+Task countDownTimerTask(1000, TASK_FOREVER, &TimerCountdownCallback);
 
 // LCD
 LiquidCrystal_I2C lcd(LCD_I2C_Addr, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); // Set the LCD I2C address and pinout
@@ -63,18 +67,11 @@ ClickEncoderStream encStream(clickEncoder, 1);
 // Init menu input
 MENU_INPUTS(in, &encStream);
 
-void StartTimer()
-{
-  int timeInSec = numberOfSeconds(makeTime(motorTimerTime));
-  motorTimerTask.set(1000, timeInSec, &motorTimerCountdown);
-  motorTimerTask.enable();
-}
-
 //Timer Menu
-PADMENU(motorTimerMenu, "", StartTimer, exitEvent, noStyle,
-        FIELD(motorTimerTime.Hour, "", ":", 1, 12, 1, 0, doNothing, noEvent, wrapStyle),
-        FIELD(motorTimerTime.Minute, "", ":", 0, 60, 1, 0, doNothing, noEvent, wrapStyle),
-        FIELD(motorTimerTime.Second, "", " ", 0, 60, 1, 0, doNothing, noEvent, wrapStyle));
+MENU(motorTimerMenu, "Timer", startTimerCountdownCallback, exitEvent, noStyle,
+     FIELD(countDownTimerMinutes, "Min", "", 0, 120, 5, 0, doNothing, noEvent, wrapStyle),
+     OP("Reset", resetCountdownTimer, enterEvent),
+     EXIT("<Start"));
 
 // Motor on off menu object
 TOGGLE(motorRelayValue, setMotorRelay, "Motor: ", doNothing, noEvent, noStyle,
@@ -127,7 +124,7 @@ void encoderTaskCallback()
   clickEncoder.service();
 }
 
-void timeTaskCallback()
+void printTimesTaskCallback()
 {
   RTC.read(rtcTime);
   time_t time = makeTime(rtcTime);
@@ -137,8 +134,12 @@ void timeTaskCallback()
   // m_amPm = isAM(time) ? 0 : 1;
 
   char buf[12];
-  sprintf(buf, "%2d:%02d:%02d %s", hour(time), rtcTime.Minute, rtcTime.Second, isAM(time) ? "AM" : "PM");
+  sprintf(buf, "%2d:%02d %s", hour(time), rtcTime.Minute, isAM(time) ? "AM" : "PM");
   lcd.setCursor(0, 0);
+  lcd.print(buf);
+
+  sprintf(buf, "Brew %02d:%02d", countDownTimerMinutes, coundDownTimerSeconds);
+  lcd.setCursor(10, 0);
   lcd.print(buf);
 }
 
@@ -161,21 +162,58 @@ void motorTaskCallback()
   digitalWrite(Mot_RELAY_PIN, motorRelayValue);
 }
 
-void motorTimerCountdown()
+void resetCountdownTimer()
+{
+  countDownTimerMinutes = 0;
+  coundDownTimerSeconds = 0;
+  countDownTimerTask.disable();
+  scheduler.deleteTask(countDownTimerTask);
+}
+
+void startTimerCountdownCallback()
+{
+  int timeInSec = coundDownTimerSeconds + (countDownTimerMinutes * SECS_PER_MIN);
+  countDownTimerTask.set(1000, timeInSec, &TimerCountdownCallback);
+  scheduler.addTask(countDownTimerTask);
+  countDownTimerTask.enable();
+  Serial.println("Motor task enabled: ");
+}
+
+void TimerCountdownCallback()
 {
   Task &t = scheduler.currentTask();
-  time_t timeInSec = numberOfSeconds(makeTime(motorTimerTime));
+  if(t.isFirstIteration())
+  {
+    //motorRelayValue = HIGH;
+  }
+  time_t timeInSec = coundDownTimerSeconds + countDownTimerMinutes * SECS_PER_MIN;
   timeInSec--;
-  breakTime(timeInSec, motorTimerTime);
+  countDownTimerMinutes = timeInSec / SECS_PER_MIN;
+  coundDownTimerSeconds = timeInSec % SECS_PER_MIN;
+  Serial.println("CountDown: ");
+  Serial.println(timeInSec);
 
   if (t.isLastIteration())
   {
-    motorRelayValue = LOW;
+    //motorRelayValue = LOW;
+    countDownTimerTask.disable();
+    scheduler.deleteTask(countDownTimerTask);
+    Serial.println("Last Reached");
   }
 }
 
 void setup()
 {
+  lcd.begin(20, 4);
+  char buf[12];
+  sprintf(buf, "Brewmano V%d.%d", MAJOR_VERSION, MINOR_VERSION);
+  lcd.setCursor(3, 1);
+  lcd.print(buf);
+  lcd.setCursor(3, 2);
+  lcd.print("Happy Brewing!");
+
+  delay(8000);
+
   //Init Motor pins
   pinMode(Mot_PIN, OUTPUT);
   pinMode(Mot_RELAY_PIN, OUTPUT);
@@ -190,7 +228,6 @@ void setup()
   Serial.begin(9600);
   while (!Serial)
     ;
-  lcd.begin(20, 4);
 
   //Init Time Module
   RTC.read(rtcTime);
@@ -201,7 +238,9 @@ void setup()
     // Check if the compile time is greater than the RTC time
     if (makeTime(compileTime) > makeTime(rtcTime))
     {
-      RTC.write(compileTime);
+      Serial.print("Set to compiletime");
+      rtcTime = compileTime;
+      RTC.write(rtcTime);
     }
   }
 
@@ -232,8 +271,9 @@ void loop()
     motorRelayValue = motorRelayValue ? LOW : HIGH;
     if (motorRelayValue == LOW)
     {
-      motorTimerTask.disable();
-      scheduler.deleteTask(motorTimerTask);
+      //disable the timer task
+      //countDownTimerTask.disable();
+      //scheduler.deleteTask(countDownTimerTask);
     }
   }
 }
